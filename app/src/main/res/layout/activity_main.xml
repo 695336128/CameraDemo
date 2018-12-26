@@ -9,12 +9,13 @@
 
     <zt.zhang.camerademo.AutoFitTextureView
         android:id="@+id/texture_view"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
     <Button
         android:id="@+id/take_pic_bt"
         android:text="拍照"
+        android:visibility="gone"
         android:layout_alignParentBottom="true"
         android:layout_below="@+id/texture_view"
         android:layout_width="match_parent"

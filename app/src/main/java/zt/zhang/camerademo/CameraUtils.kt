@@ -20,12 +20,12 @@ object CameraUtils {
         for (option in choices){
 //            if (option.height == option.width * h / w && option.width >= width && option.height >= height){
                 bigEnough.add(option)
-            println(option.width.toString() + " * " + option.height.toString())
+//            println(option.width.toString() + " * " + option.height.toString())
 //            }
         }
         // 如果找到多个预览尺寸，获取其中面积最小的
         if (bigEnough.size > 0){
-            return bigEnough[0]
+            return bigEnough[1]
 //            return bigEnough.minWith(CompareSizesByArea())!!
         }else{
             println("找不到合适的预览尺寸")
