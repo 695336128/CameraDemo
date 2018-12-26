@@ -18,13 +18,15 @@ object CameraUtils {
         val w = aspectRatio.width
         val h = aspectRatio.height
         for (option in choices){
-            if (option.height == option.width * h / w && option.width >= width && option.height >= height){
+//            if (option.height == option.width * h / w && option.width >= width && option.height >= height){
                 bigEnough.add(option)
-            }
+            println(option.width.toString() + " * " + option.height.toString())
+//            }
         }
         // 如果找到多个预览尺寸，获取其中面积最小的
         if (bigEnough.size > 0){
-            return bigEnough.minWith(CompareSizesByArea())!!
+            return bigEnough[0]
+//            return bigEnough.minWith(CompareSizesByArea())!!
         }else{
             println("找不到合适的预览尺寸")
             return choices[0]
@@ -35,7 +37,14 @@ object CameraUtils {
 
         override fun compare(o1: Size?, o2: Size?): Int {
             // 强转为long保证不会发生溢出
-            return java.lang.Long.signum(o1?.getWidth() as Long * o1.getHeight() - o2?.getWidth() as Long * o2.getHeight())
+//            return o1!!.width  * o1.height - o2!!.width  * o2.height
+                if (o1!!.width  * o1.height - o2!!.width  * o2.height > 0){
+                return 1
+            }else if (o1.width  * o1.height - o2.width  * o2.height == 0){
+                return 0
+            }else{
+                return  -1
+            }
         }
     }
 }

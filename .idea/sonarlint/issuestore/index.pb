@@ -33,3 +33,9 @@ k
 ;app/src/main/java/zt/zhang/camerademo/AutoFitTextureView.kt,d\8\d8570f70aa64943754708382af694d8b8931f3b0
 h
 8app/src/test/java/zt/zhang/camerademo/ExampleUnitTest.kt,4\0\40e0b02c5219f3045b0934b1995019c48e1525e8
+d
+4app/src/main/java/zt/zhang/camerademo/CameraUtils.kt,6\e\6ea1d2be8ea084fa4c035907253b2fd127780f2e
+j
+:common/src/main/java/com/zhang/common/base/BaseActivity.kt,3\3\3373c86677819bc77317ec3ea2990b5c3adf0b85
+R
+"app/src/main/res/values/styles.xml,f\7\f79cc2688e29fcbc286fda14ae07b27c9e83690f

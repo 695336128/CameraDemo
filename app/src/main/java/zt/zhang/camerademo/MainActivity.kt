@@ -1,5 +1,6 @@
 package zt.zhang.camerademo
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
@@ -37,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     private var priviewSize: Size? = null
     private var previewRequestBuilder: CaptureRequest.Builder? = null
     /** 定义用于预览照片的捕获请求*/
-    private var priviewRequest: CaptureRequest? = null
+    private var previewRequest: CaptureRequest? = null
     /** 定义cameraCaptureSession 成员变量*/
     private var captureSession: CameraCaptureSession? = null
     private var imageReader: ImageReader? = null
@@ -53,17 +54,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * 设置相机的监听和回调
+     */
+    private fun initSetting() {
+
+        ORIENTATIONS.append(Surface.ROTATION_0, 90)
+        ORIENTATIONS.append(Surface.ROTATION_90, 0)
+        ORIENTATIONS.append(Surface.ROTATION_180, 270)
+        ORIENTATIONS.append(Surface.ROTATION_270, 180)
+
+        mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
+
+            }
+
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture?) {
+
+            }
+
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture?): Boolean {
+                return true
+            }
+
+            @SuppressLint("NewApi")
+
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
+                // 当TextureView可用时，打开摄像头
+                setUpCameraOutputs(width, height)
+                openCamera(width, height)
+            }
+
+        }
+
+        stateCallback = object : CameraDevice.StateCallback() {
+            override fun onOpened(camera: CameraDevice?) {
+                // 摄像头被打开时激发该方法
+                cameraDevice = camera
+                createCameraPreviewSession()
+            }
+
+            override fun onDisconnected(camera: CameraDevice?) {
+                cameraDevice?.close()
+                cameraDevice = null
+            }
+
+            override fun onError(camera: CameraDevice?, error: Int) {
+                cameraDevice?.close()
+                cameraDevice = null
+                finish()
+            }
+
+        }
+    }
+
+    /**
      * 初始化布局
      */
     private fun initView(){
         textureView = findViewById(R.id.texture_view)
         takeButton = findViewById(R.id.take_pic_bt)
+
+        takeButton.setOnClickListener { view ->  captureStillPicture()}
     }
 
     /**
      * 捕捉静态图片
      */
-    private fun captureStillPicture() {
+    private fun captureStillPicture()  {
         try {
             // 创建作为拍照的captureRequest.Builder
             val captureRequestBuilder: CaptureRequest.Builder? = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
@@ -88,7 +145,7 @@ class MainActivity : AppCompatActivity() {
                        // 设置自动曝光模式
                        previewRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
                        // 打开连续取景模式
-                       captureSession?.setRepeatingRequest(priviewRequest,null,null)
+                       captureSession?.setRepeatingRequest(previewRequest,null,null)
                    }catch (e: CameraAccessException){
                        e.printStackTrace()
                    }
@@ -108,10 +165,16 @@ class MainActivity : AppCompatActivity() {
         try {
             // 打开摄像头
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: GOTO请求权限
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this,Manifest.permission.CAMERA)){
+                    // TODO:弹出对话框
+                }else{
+                    // 申请权限
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA),9000)
+                }
                 return
+            }else{
+                manager.openCamera(mCameraId, stateCallback, null)
             }
-            manager.openCamera(mCameraId, stateCallback, null)
 
         } catch (e: CameraAccessException) {
             e.printStackTrace()
@@ -157,9 +220,9 @@ class MainActivity : AppCompatActivity() {
             // 根据选中的预览尺寸来调整预览组件的长宽比
             val orientation = resources.configuration.orientation
             if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                textureView?.setAspectRatio(priviewSize!!.width, priviewSize!!.height)
+                textureView.setAspectRatio(priviewSize!!.width, priviewSize!!.height)
             } else {
-                textureView?.setAspectRatio(priviewSize!!.height, priviewSize!!.width)
+                textureView.setAspectRatio(priviewSize!!.height, priviewSize!!.width)
             }
         } catch (e: CameraAccessException) {
             e.printStackTrace()
@@ -170,56 +233,54 @@ class MainActivity : AppCompatActivity() {
 
 
     /**
-     * 设置相机的监听和回调
+     * 开始预览
      */
-    private fun initSetting() {
-
-        ORIENTATIONS.append(Surface.ROTATION_0, 90)
-        ORIENTATIONS.append(Surface.ROTATION_90, 0)
-        ORIENTATIONS.append(Surface.ROTATION_180, 270)
-        ORIENTATIONS.append(Surface.ROTATION_270, 180)
-
-        mSurfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
-
+    @SuppressLint("Recycle")
+    private fun createCameraPreviewSession(){
+        val texture = textureView.surfaceTexture
+        texture.setDefaultBufferSize(priviewSize!!.width,priviewSize!!.height)
+        val surface = Surface(texture)
+        // 常见作为预览的CaptureRequest.Builder
+        previewRequestBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+        // 将textureView的surface作为CaaptureRequest.Builder的目标
+        previewRequestBuilder?.addTarget(surface)
+        // 创建CameraCaprureSession，该对象负责管理处理预览请求和拍照请求
+        cameraDevice?.createCaptureSession(arrayListOf(surface,imageReader?.surface),object: CameraCaptureSession.StateCallback() {
+            override fun onConfigured(session: CameraCaptureSession?) {
+                // 如果摄像头为null,直接结束方法
+                if (null == cameraDevice){
+                    return
+                }
+                // 当摄像头已经准备好时，开始显示预览
+                captureSession = session
+                try{
+                    // 设置自动对焦模式
+                    previewRequestBuilder?.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                    // 设置自动曝光模式
+                    previewRequestBuilder?.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
+                    // 开始显示相机预览
+                    previewRequest = previewRequestBuilder?.build()
+                    // 设置预览时连续捕获图像数据
+                    captureSession?.setRepeatingRequest(previewRequest,null,null)
+                }catch (e: CameraAccessException){
+                    e.printStackTrace()
+                }
             }
 
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture?) {
-
+            override fun onConfigureFailed(session: CameraCaptureSession?) {
+                Toast.makeText(this@MainActivity,"配置失败",Toast.LENGTH_SHORT).show()
             }
 
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture?): Boolean {
-                return true
+        },null)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 9000){
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED){
+                Toast.makeText(this@MainActivity,"相机权限申请成功",Toast.LENGTH_SHORT).show()
+                initSetting()
             }
-
-            @SuppressLint("NewApi")
-
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
-                // 当TextureView可用时，打开摄像头
-                setUpCameraOutputs(width, height)
-                openCamera(width, height)
-            }
-
-        }
-
-        stateCallback = object : CameraDevice.StateCallback() {
-            override fun onOpened(camera: CameraDevice?) {
-                // 摄像头被打开时激发该方法
-                cameraDevice = camera
-                TODO("开始预览")
-            }
-
-            override fun onDisconnected(camera: CameraDevice?) {
-                cameraDevice?.close()
-                cameraDevice = null
-            }
-
-            override fun onError(camera: CameraDevice?, error: Int) {
-                cameraDevice?.close()
-                cameraDevice = null
-                finish()
-            }
-
         }
     }
 }
