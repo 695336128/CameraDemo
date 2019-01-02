@@ -5,14 +5,19 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Camera
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.hardware.camera2.params.Face
 import android.hardware.camera2.params.StreamConfigurationMap
+import android.media.Image
 import android.media.ImageReader
 import android.os.Bundle
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Message
 import android.support.v4.app.ActivityCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Size
@@ -44,18 +49,64 @@ class MainActivity : AppCompatActivity() {
     /** 定义cameraCaptureSession 成员变量*/
     private var captureSession: CameraCaptureSession? = null
     private var imageReader: ImageReader? = null
+    private var previewReader: ImageReader? = null
     private var mSurfaceTextureListener: TextureView.SurfaceTextureListener? = null
     private var stateCallback: CameraDevice.StateCallback? = null
     private val mCamera: Camera? = null
     private var mFaceDetectSupported = false
     private var mFaceDetectMode = 0
+    private var mBackgroundThread: HandlerThread? = null
+    private var mBackgroundHandler: Handler? = null
+    private var mHandler = @SuppressLint("HandlerLeak")
+    object : Handler(){
+        override fun handleMessage(msg: Message?) {
+            super.handleMessage(msg)
+            if (msg?.what == 1001){
+                shotScreen()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         initView()
+        initHandler()
         initSetting()
         textureView.surfaceTextureListener = mSurfaceTextureListener
+    }
+
+    /**
+     * 初始化布局
+     */
+    private fun initView() {
+        textureView = findViewById(R.id.texture_view)
+        takeButton = findViewById(R.id.take_pic_bt)
+
+        takeButton.setOnClickListener { view -> captureStillPicture() }
+    }
+
+    /**
+     * 初始化线程
+     */
+    private fun initHandler() {
+        mBackgroundThread = HandlerThread("CameraBackground")
+        mBackgroundThread?.start()
+        mBackgroundHandler = Handler(mBackgroundThread?.looper)
+    }
+
+    /**
+     * 截屏
+     */
+    private fun shotScreen(){
+        Thread().run {
+            println("图片截取前的标志")
+            val bitmap = textureView.bitmap
+            println("截取的图片的大小是------ ${bitmap.byteCount}")
+            mHandler.sendEmptyMessageDelayed(1001,500)
+//        BitmapUtil.saveImage2File(bitmap)
+            bitmap.recycle()
+        }
     }
 
     /**
@@ -74,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onSurfaceTextureUpdated(surface: SurfaceTexture?) {
-
+                // 这个方法要注意一下，因为每有一帧画面，都会回调一次此方法
             }
 
             override fun onSurfaceTextureDestroyed(surface: SurfaceTexture?): Boolean {
@@ -87,6 +138,7 @@ class MainActivity : AppCompatActivity() {
                 // 当TextureView可用时，打开摄像头
                 setUpCameraOutputs(width, height)
                 openCamera(width, height)
+                mHandler.sendEmptyMessageDelayed(1001,1000)
             }
 
         }
@@ -110,16 +162,6 @@ class MainActivity : AppCompatActivity() {
             }
 
         }
-    }
-
-    /**
-     * 初始化布局
-     */
-    private fun initView() {
-        textureView = findViewById(R.id.texture_view)
-        takeButton = findViewById(R.id.take_pic_bt)
-
-        takeButton.setOnClickListener { view -> captureStillPicture() }
     }
 
     /**
@@ -174,11 +216,12 @@ class MainActivity : AppCompatActivity() {
                     // TODO:弹出对话框
                 } else {
                     // 申请权限
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 9000)
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA,Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE), 9000)
                 }
                 return
             } else {
-                manager.openCamera(mCameraId, stateCallback, null)
+                manager.openCamera(mCameraId, stateCallback, mBackgroundHandler)
             }
 
         } catch (e: CameraAccessException) {
@@ -237,6 +280,28 @@ class MainActivity : AppCompatActivity() {
                     image.close()
                 }
             }, null)
+
+            previewReader = ImageReader.newInstance(largest!!.width, largest.height, ImageFormat.YUV_420_888, 2)
+            previewReader?.setOnImageAvailableListener({
+                var image: Image? = null
+                var mBitMap: Bitmap? = null
+                try{
+                    image = previewReader!!.acquireNextImage()
+                    println("截取播放中的图片")
+                    if (image == null){
+                        return@setOnImageAvailableListener
+                    }
+                    var nv21ByteArray = CameraUtils.YUV_420_888toNV21(image)
+                    val mNV21ToBitmap = NV21ToBitmap(this@MainActivity)
+                    mBitMap =  mNV21ToBitmap.nv21ToBitmap(nv21ByteArray,image.width, image.height)
+                    val base64ofBitMap = Base64BitmapUtil.bitmapToBase64(mBitMap)
+                    println(base64ofBitMap)
+                }finally {
+                    image?.close()
+                    mBitMap?.recycle()
+                    mBitMap = null
+                }
+            },null)
 
             // 获取最佳的预览尺寸
             previewSize = CameraUtils.chooseOptimalSize(map.getOutputSizes(SurfaceTexture::class.java), width, height, largest)
